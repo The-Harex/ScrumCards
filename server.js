@@ -423,5 +423,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🎴 Scrum Spread server running on http://localhost:${PORT}`);
+    console.log(`⚔️ Point Battle server running on http://localhost:${PORT}`);
 });

@@ -1,7 +1,7 @@
 {
-  "name": "scrum-spread",
+  "name": "point-battle",
   "version": "1.0.0",
-  "description": "A fun, colorful Planning Poker web app for Scrum teams - Scrum Spread",
+  "description": "A fun, colorful Planning Poker web app for Scrum teams - Point Battle",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
