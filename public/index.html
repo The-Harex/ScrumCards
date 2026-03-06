@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scrum Spread - Planning Poker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'fantasy': ['Cinzel', 'serif'],
+                        'body': ['Quicksand', 'sans-serif'],
+                    },
+                    colors: {
+                        'mystic': {
+                            50: '#f5f3ff',
+                            100: '#ede9fe',
+                            200: '#ddd6fe',
+                            300: '#c4b5fd',
+                            400: '#a78bfa',
+                            500: '#8b5cf6',
+                            600: '#7c3aed',
+                            700: '#6d28d9',
+                            800: '#5b21b6',
+                            900: '#4c1d95',
+                        },
+                        'enchanted': {
+                            50: '#ecfdf5',
+                            100: '#d1fae5',
+                            200: '#a7f3d0',
+                            300: '#6ee7b7',
+                            400: '#34d399',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                            800: '#065f46',
+                            900: '#064e3b',
+                        },
+                        'flame': {
+                            50: '#fff7ed',
+                            100: '#ffedd5',
+                            200: '#fed7aa',
+                            300: '#fdba74',
+                            400: '#fb923c',
+                            500: '#f97316',
+                            600: '#ea580c',
+                            700: '#c2410c',
+                            800: '#9a3412',
+                            900: '#7c2d12',
+                        }
+                    },
+                    animation: {
+                        'float': 'float 3s ease-in-out infinite',
+                        'glow': 'glow 2s ease-in-out infinite alternate',
+                        'sparkle': 'sparkle 1.5s ease-in-out infinite',
+                        'flip': 'flip 0.6s ease-in-out',
+                        'shake': 'shake 0.5s ease-in-out',
+                        'bounce-slow': 'bounce 2s infinite',
+                        'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
+                        'celebrate': 'celebrate 0.5s ease-in-out',
+                        'dispute': 'dispute 0.3s ease-in-out 3',
+                        'countdown': 'countdown 0.8s ease-in-out',
+                        'slide-in-right': 'slideInRight 0.3s ease-out',
+                        'slide-out-right': 'slideOutRight 0.3s ease-in',
+                        'thunder-shake': 'thunderShake 0.6s ease-in-out',
+                        'golden-pulse': 'goldenPulse 1.5s ease-in-out infinite',
+                        'dispute-glow': 'disputeGlow 1s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        },
+                        glow: {
+                            '0%': { boxShadow: '0 0 20px rgba(139, 92, 246, 0.5)' },
+                            '100%': { boxShadow: '0 0 40px rgba(139, 92, 246, 0.8), 0 0 60px rgba(139, 92, 246, 0.4)' },
+                        },
+                        sparkle: {
+                            '0%, 100%': { opacity: '1', transform: 'scale(1)' },
+                            '50%': { opacity: '0.5', transform: 'scale(1.2)' },
+                        },
+                        flip: {
+                            '0%': { transform: 'rotateY(0deg)' },
+                            '100%': { transform: 'rotateY(180deg)' },
+                        },
+                        shake: {
+                            '0%, 100%': { transform: 'translateX(0)' },
+                            '25%': { transform: 'translateX(-5px)' },
+                            '75%': { transform: 'translateX(5px)' },
+                        },
+                        pulseGlow: {
+                            '0%, 100%': { boxShadow: '0 0 20px rgba(16, 185, 129, 0.6)' },
+                            '50%': { boxShadow: '0 0 40px rgba(16, 185, 129, 1), 0 0 60px rgba(16, 185, 129, 0.6)' },
+                        },
+                        celebrate: {
+                            '0%': { transform: 'scale(1)' },
+                            '50%': { transform: 'scale(1.1)' },
+                            '100%': { transform: 'scale(1)' },
+                        },
+                        dispute: {
+                            '0%, 100%': { transform: 'rotate(0deg)' },
+                            '25%': { transform: 'rotate(-3deg)' },
+                            '75%': { transform: 'rotate(3deg)' },
+                        },
+                        countdown: {
+                            '0%': { transform: 'scale(0.5)', opacity: '0' },
+                            '50%': { transform: 'scale(1.2)', opacity: '1' },
+                            '100%': { transform: 'scale(1)', opacity: '1' },
+                        },
+                        slideInRight: {
+                            '0%': { transform: 'translateX(100%)' },
+                            '100%': { transform: 'translateX(0)' },
+                        },
+                        slideOutRight: {
+                            '0%': { transform: 'translateX(0)' },
+                            '100%': { transform: 'translateX(100%)' },
+                        },
+                        thunderShake: {
+                            '0%, 100%': { transform: 'translateX(0) rotate(0deg)' },
+                            '10%': { transform: 'translateX(-8px) rotate(-2deg)' },
+                            '20%': { transform: 'translateX(8px) rotate(2deg)' },
+                            '30%': { transform: 'translateX(-6px) rotate(-1deg)' },
+                            '40%': { transform: 'translateX(6px) rotate(1deg)' },
+                            '50%': { transform: 'translateX(-4px) rotate(0deg)' },
+                            '60%': { transform: 'translateX(4px) rotate(0deg)' },
+                            '70%': { transform: 'translateX(-2px) rotate(0deg)' },
+                            '80%': { transform: 'translateX(2px) rotate(0deg)' },
+                            '90%': { transform: 'translateX(-1px) rotate(0deg)' },
+                        },
+                        goldenPulse: {
+                            '0%, 100%': { boxShadow: '0 0 30px rgba(255, 215, 0, 0.6), 0 0 60px rgba(255, 215, 0, 0.4)' },
+                            '50%': { boxShadow: '0 0 60px rgba(255, 215, 0, 1), 0 0 100px rgba(255, 215, 0, 0.8), 0 0 140px rgba(255, 215, 0, 0.4)' },
+                        },
+                        disputeGlow: {
+                            '0%, 100%': { boxShadow: '0 0 30px rgba(239, 68, 68, 0.6), 0 0 60px rgba(249, 115, 22, 0.4)' },
+                            '50%': { boxShadow: '0 0 50px rgba(239, 68, 68, 0.9), 0 0 80px rgba(249, 115, 22, 0.7)' },
+                        },
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+        }
+        
+        .magical-bg {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .magical-bg::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 20% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 20%, rgba(16, 185, 129, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 40% 40%, rgba(249, 115, 22, 0.05) 0%, transparent 30%);
+            pointer-events: none;
+        }
+        
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 0;
+        }
+        
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 3s infinite;
+        }
+        
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+        
+        .card-3d {
+            perspective: 1000px;
+        }
+        
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        
+        .card-inner.flipped {
+            transform: rotateY(180deg);
+        }
+        
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 1rem;
+        }
+        
+        .card-back {
+            transform: rotateY(180deg);
+        }
+        
+        .tarot-border {
+            background: linear-gradient(135deg, #ffd700 0%, #ff8c00 25%, #ffd700 50%, #ff8c00 75%, #ffd700 100%);
+            padding: 4px;
+            border-radius: 1rem;
+        }
+        
+        .tarot-inner {
+            background: linear-gradient(180deg, #1a1a2e 0%, #2d1b4e 100%);
+            border-radius: 0.875rem;
+        }
+        
+        .vote-card {
+            transition: all 0.3s ease;
+        }
+        
+        .vote-card:hover {
+            transform: translateY(-8px) scale(1.05);
+            box-shadow: 0 10px 40px rgba(139, 92, 246, 0.4);
+        }
+        
+        .vote-card.selected {
+            transform: translateY(-12px) scale(1.1);
+            box-shadow: 0 15px 50px rgba(16, 185, 129, 0.6);
+        }
+        
+        .glow-text {
+            text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
+        }
+        
+        .scroll-hidden::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .scroll-hidden::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        
+        .scroll-hidden::-webkit-scrollbar-thumb {
+            background: rgba(139, 92, 246, 0.5);
+            border-radius: 3px;
+        }
+        
+        .scroll-hidden::-webkit-scrollbar-thumb:hover {
+            background: rgba(139, 92, 246, 0.7);
+        }
+        
+        .countdown-number {
+            font-size: 8rem;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 30px #ffd700, 0 0 60px #ff8c00, 0 0 90px #ffd700;
+        }
+        
+        input, textarea {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+        
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #8b5cf6;
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+        }
+        
+        input::placeholder, textarea::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .member-badge {
+            transition: all 0.3s ease;
+        }
+        
+        .member-badge:hover {
+            transform: scale(1.05);
+        }
+        
+        .confetti {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        .firework {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        
+        .consensus-banner {
+            animation: bannerDrop 0.5s ease-out forwards;
+        }
+        
+        @keyframes bannerDrop {
+            0% { transform: translateY(-100px) scale(0.5); opacity: 0; }
+            60% { transform: translateY(10px) scale(1.1); opacity: 1; }
+            100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        
+        .dispute-banner {
+            animation: bannerShake 0.5s ease-out forwards;
+        }
+        
+        @keyframes bannerShake {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { transform: scale(1.2); opacity: 1; }
+            60% { transform: rotate(-3deg); }
+            70% { transform: rotate(3deg); }
+            80% { transform: rotate(-2deg); }
+            90% { transform: rotate(2deg); }
+            100% { transform: rotate(0deg) scale(1); opacity: 1; }
+        }
+        
+        .point-option-btn {
+            transition: all 0.2s ease;
+        }
+        
+        .point-option-btn:hover {
+            transform: scale(1.15);
+            box-shadow: 0 0 30px currentColor;
+        }
+    </style>
+</head>
+<body class="font-body text-white min-h-screen magical-bg">
+    <!-- Stars Background -->
+    <div class="stars" id="stars"></div>
+
+    <!-- Home Page -->
+    <div id="homePage" class="min-h-screen flex items-center justify-center p-4 pb-14 relative z-10">
+        <div class="max-w-lg w-full">
+            <!-- Logo/Title -->
+            <div class="text-center mb-12">
+                <div class="inline-block animate-float">
+                    <svg class="w-24 h-24 mx-auto mb-4" viewBox="0 0 100 100" fill="none">
+                        <defs>
+                            <linearGradient id="cardGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#ffd700"/>
+                                <stop offset="50%" style="stop-color:#ff8c00"/>
+                                <stop offset="100%" style="stop-color:#ffd700"/>
+                            </linearGradient>
+                        </defs>
+                        <rect x="10" y="5" width="50" height="70" rx="5" fill="url(#cardGradient)" transform="rotate(-15 35 40)"/>
+                        <rect x="25" y="10" width="50" height="70" rx="5" fill="#8b5cf6" transform="rotate(0 50 45)"/>
+                        <rect x="40" y="15" width="50" height="70" rx="5" fill="#10b981" transform="rotate(15 65 50)"/>
+                        <text x="50" y="55" text-anchor="middle" fill="white" font-size="24" font-weight="bold">?</text>
+                    </svg>
+                </div>
+                <h1 class="font-fantasy text-5xl font-bold bg-gradient-to-r from-yellow-400 via-orange-400 to-yellow-400 bg-clip-text text-transparent mb-2">
+                    Scrum Spread
+                </h1>
+                <p class="text-mystic-300 text-lg">Planning Poker for Agile Teams</p>
+            </div>
+
+            <!-- Create/Join Options -->
+            <div class="space-y-6">
+                <!-- Create Room -->
+                <div class="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10 hover:border-mystic-500/50 transition-all">
+                    <h2 class="font-fantasy text-xl text-mystic-300 mb-4 flex items-center gap-2">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Create a Room
+                    </h2>
+                    <div class="space-y-4">
+                        <input type="text" id="createRoomName" placeholder="Room Name (e.g., Sprint 42)" 
+                            class="w-full px-4 py-3 rounded-xl focus:ring-2 focus:ring-mystic-500">
+                        <input type="text" id="createUserName" placeholder="Your Name" 
+                            class="w-full px-4 py-3 rounded-xl focus:ring-2 focus:ring-mystic-500">
+                        <button onclick="createRoom()" 
+                            class="w-full py-3 px-6 bg-gradient-to-r from-mystic-600 to-mystic-700 hover:from-mystic-500 hover:to-mystic-600 rounded-xl font-semibold transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                            </svg>
+                            Create Room
+                        </button>
+                    </div>
+                </div>
+
+                <div class="text-center text-mystic-400">— or —</div>
+
+                <!-- Join Room -->
+                <div class="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10 hover:border-enchanted-500/50 transition-all">
+                    <h2 class="font-fantasy text-xl text-enchanted-300 mb-4 flex items-center gap-2">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                        Join a Room
+                    </h2>
+                    <div class="space-y-4">
+                        <input type="text" id="joinRoomCode" placeholder="Room Code (e.g., ABC123)" 
+                            class="w-full px-4 py-3 rounded-xl uppercase tracking-widest text-center text-lg focus:ring-2 focus:ring-enchanted-500">
+                        <input type="text" id="joinUserName" placeholder="Your Name" 
+                            class="w-full px-4 py-3 rounded-xl focus:ring-2 focus:ring-enchanted-500">
+                        <button onclick="joinRoom()" 
+                            class="w-full py-3 px-6 bg-gradient-to-r from-enchanted-600 to-enchanted-700 hover:from-enchanted-500 hover:to-enchanted-600 rounded-xl font-semibold transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+                            </svg>
+                            Join Room
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error Message -->
+            <div id="errorMessage" class="hidden mt-4 p-4 bg-red-500/20 border border-red-500/50 rounded-xl text-red-300 text-center">
+            </div>
+        </div>
+    </div>
+
+    <!-- Room Page -->
+    <div id="roomPage" class="hidden min-h-screen flex flex-col relative z-10 pb-10">
+        <!-- Header -->
+        <header class="bg-black/30 backdrop-blur-lg border-b border-white/10 px-4 py-3">
+            <div class="flex items-center justify-between max-w-screen-2xl mx-auto">
+                <!-- Room Info -->
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-6 h-6 text-mystic-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                        </svg>
+                        <span id="roomNameDisplay" class="font-fantasy text-lg text-white"></span>
+                    </div>
+                    <div class="flex items-center gap-2 bg-mystic-600/30 px-3 py-1 rounded-lg">
+                        <span class="text-mystic-300 text-sm">Code:</span>
+                        <span id="roomCodeDisplay" class="font-mono font-bold text-mystic-200 tracking-widest"></span>
+                        <button onclick="copyRoomCode()" class="text-mystic-300 hover:text-white transition-colors" title="Copy Code">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Role Toggle & Exit -->
+                <div class="flex items-center gap-4">
+                    <!-- Role Toggle -->
+                    <div class="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl">
+                        <span class="text-sm text-gray-400">Role:</span>
+                        <button id="roleToggle" onclick="toggleRole()" class="flex items-center gap-2 px-3 py-1 rounded-lg transition-all">
+                            <span id="roleIcon" class="w-5 h-5"></span>
+                            <span id="roleText" class="font-semibold"></span>
+                        </button>
+                    </div>
+
+                    <!-- Exit Button -->
+                    <button onclick="leaveRoom()" class="flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/40 border border-red-500/50 rounded-xl text-red-300 hover:text-red-200 transition-all">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                        </svg>
+                        <span class="hidden sm:inline">Exit</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content - 3 Column Layout -->
+        <main class="flex-1 flex overflow-hidden pb-10">
+            <!-- Left Panel - Story Management (15%) -->
+            <aside class="w-[15%] min-w-[200px] bg-black/20 border-r border-white/10 p-4 pb-6 flex flex-col">
+                <div id="hostStoryPanel">
+                    <h3 class="font-fantasy text-lg text-mystic-300 mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                        </svg>
+                        Add Story
+                    </h3>
+                    <div class="space-y-3">
+                        <input type="text" id="storyTitle" placeholder="Story Title" 
+                            class="w-full px-3 py-2 rounded-lg text-sm">
+                        <textarea id="storyDescription" placeholder="Short Description" rows="3"
+                            class="w-full px-3 py-2 rounded-lg text-sm resize-none"></textarea>
+                        <button onclick="addStory()" 
+                            class="w-full py-2 px-4 bg-gradient-to-r from-mystic-600 to-mystic-700 hover:from-mystic-500 hover:to-mystic-600 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            Add Story
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Story Queue -->
+                <div class="mt-6 flex-1 overflow-hidden flex flex-col">
+                    <h3 class="font-fantasy text-lg text-enchanted-300 mb-3 flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                        </svg>
+                        Story Queue
+                    </h3>
+                    <div id="storyQueue" class="flex-1 overflow-y-auto scroll-hidden space-y-2">
+                        <!-- Stories will be rendered here -->
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center Panel - Main Card Area (70%) -->
+            <section class="w-[70%] flex flex-col items-center justify-between p-6 pb-8 relative">
+                <!-- Countdown Overlay -->
+                <div id="countdownOverlay" class="hidden absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
+                    <div id="countdownNumber" class="countdown-number animate-countdown"></div>
+                </div>
+
+                <!-- Current Story Card -->
+                <div class="flex-1 flex flex-col items-center justify-center w-full max-w-md">
+                    <div id="storyCard" class="card-3d w-full aspect-[2/3] max-h-[60vh] cursor-pointer" onclick="flipCard()">
+                        <div id="cardInner" class="card-inner">
+                            <!-- Card Front -->
+                            <div class="card-front tarot-border animate-float">
+                                <div class="tarot-inner h-full flex flex-col items-center justify-center p-6 relative overflow-hidden">
+                                    <!-- Decorative Elements -->
+                                    <div class="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-yellow-500/50"></div>
+                                    <div class="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-yellow-500/50"></div>
+                                    <div class="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-yellow-500/50"></div>
+                                    <div class="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-yellow-500/50"></div>
+
+                                    <!-- Card Content -->
+                                    <div id="cardPlaceholder" class="text-center">
+                                        <svg class="w-20 h-20 mx-auto mb-4 text-mystic-500 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                                        </svg>
+                                        <p class="text-mystic-400 font-fantasy">Awaiting Story...</p>
+                                        <p class="text-mystic-500 text-sm mt-2">Host will select a story to vote on</p>
+                                    </div>
+
+                                    <div id="cardContent" class="hidden text-center w-full">
+                                        <div class="mb-4">
+                                            <svg class="w-12 h-12 mx-auto text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                                            </svg>
+                                        </div>
+                                        <h2 id="currentStoryTitle" class="font-fantasy text-2xl text-white mb-3"></h2>
+                                        <p id="currentStoryDescription" class="text-mystic-300 text-sm leading-relaxed"></p>
+                                    </div>
+
+                                    <!-- Final Points Glow -->
+                                    <div id="finalPointsDisplay" class="hidden absolute bottom-8 left-1/2 transform -translate-x-1/2">
+                                        <div class="bg-enchanted-500/20 border-2 border-enchanted-400 rounded-full w-20 h-20 flex items-center justify-center animate-pulse-glow">
+                                            <span id="finalPointsValue" class="font-fantasy text-3xl font-bold text-enchanted-300 glow-text"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Card Back (Vote Details) -->
+                            <div class="card-back tarot-border">
+                                <div class="tarot-inner h-full flex flex-col p-4 overflow-hidden relative">
+                                    <!-- Result Banner -->
+                                    <div id="resultBanner" class="hidden absolute -top-2 left-1/2 transform -translate-x-1/2 z-10">
+                                        <!-- Banner will be injected here -->
+                                    </div>
+                                    
+                                    <h3 class="font-fantasy text-lg text-center text-yellow-400 mb-3 mt-6">Vote Results</h3>
+                                    <div id="voteResults" class="flex-1 overflow-y-auto scroll-hidden space-y-2">
+                                        <!-- Vote results will be rendered here -->
+                                    </div>
+                                    <div id="consensusStatus" class="mt-3 text-center">
+                                        <!-- Consensus status will be shown here -->
+                                    </div>
+                                    
+                                    <!-- Host Point Assignment (on card) -->
+                                    <div id="hostPointsOnCard" class="hidden mt-3 pt-3 border-t border-yellow-500/30">
+                                        <p class="text-xs text-center text-flame-300 mb-2">Assign Final Points:</p>
+                                        <div id="pointOptionsContainer" class="flex flex-wrap justify-center gap-2">
+                                            <!-- Point options will be rendered here -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Click hint -->
+                    <p id="cardHint" class="hidden text-mystic-400 text-sm mt-2 animate-pulse">Click card to see vote details</p>
+                </div>
+
+                <!-- Voting Section -->
+                <div id="votingSection" class="w-full max-w-4xl mb-4">
+                    <div class="text-center mb-4">
+                        <p id="votingStatus" class="text-mystic-300 font-semibold"></p>
+                    </div>
+                    
+                    <!-- Fibonacci Cards -->
+                    <div id="fibonacciCards" class="flex flex-wrap justify-center gap-2 md:gap-3">
+                        <!-- Cards will be generated by JS -->
+                    </div>
+
+                    <!-- Host Controls -->
+                    <div id="hostControls" class="hidden mt-6 flex flex-wrap justify-center gap-4">
+                        <button id="revealBtn" onclick="revealVotes()" 
+                            class="px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 rounded-xl font-bold text-black transition-all transform hover:scale-105 flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                            </svg>
+                            Reveal Votes
+                        </button>
+                    </div>
+
+                    <!-- Points Assignment - Hidden, only shown on card back -->
+                    <div id="pointsAssignment" class="hidden"></div>
+                </div>
+            </section>
+
+            <!-- Right Panel - Members & History (15%) -->
+            <aside class="w-[15%] min-w-[200px] bg-black/20 border-l border-white/10 p-4 pb-6 flex flex-col relative">
+                <!-- Active Members -->
+                <div class="flex-1 overflow-hidden flex flex-col">
+                    <h3 class="font-fantasy text-lg text-enchanted-300 mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                        </svg>
+                        Members
+                    </h3>
+                    <div id="membersList" class="flex-1 overflow-y-auto scroll-hidden space-y-2">
+                        <!-- Members will be rendered here -->
+                    </div>
+                </div>
+
+                <!-- History Toggle Button -->
+                <button onclick="toggleHistoryPanel()" 
+                    class="mt-4 mb-2 w-full py-3 px-4 bg-mystic-600/30 hover:bg-mystic-600/50 border border-mystic-500/50 rounded-xl flex items-center justify-center gap-2 transition-all">
+                    <svg class="w-5 h-5 text-mystic-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <span class="text-mystic-300 font-semibold">History</span>
+                </button>
+
+                <!-- History Slide Panel -->
+                <div id="historyPanel" class="hidden absolute top-0 right-0 w-80 h-full bg-black/95 backdrop-blur-lg border-l border-mystic-500/50 p-4 z-40 animate-slide-in-right overflow-hidden flex flex-col">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-fantasy text-xl text-yellow-400 flex items-center gap-2">
+                            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                            </svg>
+                            History
+                        </h3>
+                        <button onclick="toggleHistoryPanel()" class="text-gray-400 hover:text-white transition-colors">
+                            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="historyList" class="flex-1 overflow-y-auto scroll-hidden space-y-3">
+                        <!-- History items will be rendered here -->
+                    </div>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Footer -->
+    <footer class="fixed bottom-0 left-0 right-0 bg-black/50 backdrop-blur-sm border-t border-white/10 py-2 px-4 text-center z-40">
+        <p class="text-gray-400 text-xs">
+            Created by Ryan Finney. Please send inquiries to 
+            <a href="mailto:ryan.finney87@gmail.com" class="text-mystic-400 hover:text-mystic-300 transition-colors">ryan.finney87@gmail.com</a>. 
+            Copyright <span id="copyrightYear"></span>
+        </p>
+    </footer>
+
+    <script src="/js/app.js"></script>
+    <script>document.getElementById('copyrightYear').textContent = new Date().getFullYear();</script>
+</body>
+</html>
