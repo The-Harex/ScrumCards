@@ -153,7 +153,7 @@
         .magical-bg {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
             position: relative;
-            overflow: hidden;
+            overflow-x: hidden;
         }
         
         .magical-bg::before {
@@ -355,8 +355,8 @@
     <div class="stars" id="stars"></div>
 
     <!-- Home Page -->
-    <div id="homePage" class="min-h-screen flex items-center justify-center p-4 pb-14 relative z-10">
-        <div class="max-w-lg w-full">
+    <div id="homePage" class="min-h-screen flex items-center justify-center p-4 pb-14 relative z-10 overflow-auto">
+        <div class="max-w-lg w-full my-auto py-4">
             <!-- Logo/Title -->
             <div class="text-center mb-12">
                 <div class="inline-block animate-float">
@@ -438,7 +438,7 @@
     </div>
 
     <!-- Room Page -->
-    <div id="roomPage" class="hidden min-h-screen flex flex-col relative z-10 pb-10">
+    <div id="roomPage" class="hidden min-h-screen flex flex-col relative z-10 pb-10 overflow-auto">
         <!-- Header -->
         <header class="bg-black/30 backdrop-blur-lg border-b border-white/10 px-4 py-3">
             <div class="flex items-center justify-between max-w-screen-2xl mx-auto">
@@ -484,9 +484,9 @@
         </header>
 
         <!-- Main Content - 3 Column Layout -->
-        <main class="flex-1 flex overflow-hidden pb-10">
+        <main class="flex-1 flex flex-col lg:flex-row overflow-auto pb-10 min-h-0">
             <!-- Left Panel - Story Management (15%) -->
-            <aside class="w-[15%] min-w-[200px] bg-black/20 border-r border-white/10 p-4 pb-6 flex flex-col">
+            <aside class="w-full lg:w-[15%] lg:min-w-[200px] bg-black/20 border-b lg:border-b-0 lg:border-r border-white/10 p-4 pb-6 flex flex-col">
                 <div id="hostStoryPanel">
                     <h3 class="font-fantasy text-lg text-mystic-300 mb-4 flex items-center gap-2">
                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -524,7 +524,7 @@
             </aside>
 
             <!-- Center Panel - Main Card Area (70%) -->
-            <section class="w-[70%] flex flex-col items-center justify-between p-6 pb-8 relative">
+            <section class="w-full lg:w-[70%] flex flex-col items-center justify-between p-4 lg:p-6 pb-8 relative order-first lg:order-none">
                 <!-- Countdown Overlay -->
                 <div id="countdownOverlay" class="hidden absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
                     <div id="countdownNumber" class="countdown-number animate-countdown"></div>
@@ -632,7 +632,7 @@
             </section>
 
             <!-- Right Panel - Members & History (15%) -->
-            <aside class="w-[15%] min-w-[200px] bg-black/20 border-l border-white/10 p-4 pb-6 flex flex-col relative">
+            <aside class="w-full lg:w-[15%] lg:min-w-[200px] bg-black/20 border-t lg:border-t-0 lg:border-l border-white/10 p-4 pb-6 flex flex-col relative">
                 <!-- Active Members -->
                 <div class="flex-1 overflow-hidden flex flex-col">
                     <h3 class="font-fantasy text-lg text-enchanted-300 mb-4 flex items-center gap-2">
