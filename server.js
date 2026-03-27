@@ -43,6 +43,7 @@ io.on('connection', (socket) => {
             votes: new Map(),
             votingActive: false,
             votesRevealed: false,
+            celebrationEmoji: '🎉',
             createdAt: new Date()
         };
 
@@ -110,7 +111,8 @@ io.on('connection', (socket) => {
             currentStory,
             votingActive: room.votingActive,
             votesRevealed: room.votesRevealed,
-            votes: room.votesRevealed ? Object.fromEntries(room.votes) : {}
+            votes: room.votesRevealed ? Object.fromEntries(room.votes) : {},
+            celebrationEmoji: room.celebrationEmoji
         });
 
         // Notify others
@@ -168,6 +170,19 @@ io.on('connection', (socket) => {
             story,
             stories: room.stories
         });
+    });
+
+    // Set celebration emoji (Host only)
+    socket.on('setCelebrationEmoji', ({ emoji }) => {
+        const room = rooms.get(socket.roomCode);
+        if (!room) return;
+        const member = room.members.get(socket.id);
+        if (!member || !member.isHost) return;
+        // Only allow a small safe set of known emoji values
+        const allowed = ['🎉','🎊','🏆','🥳','🌟','⭐','✨','💫','🚀','🎯','🔥','💎','👑','🎆','🎇'];
+        if (!allowed.includes(emoji)) return;
+        room.celebrationEmoji = emoji;
+        io.to(room.code).emit('celebrationEmojiChanged', { emoji });
     });
 
     // Select a story to vote on (Host only)

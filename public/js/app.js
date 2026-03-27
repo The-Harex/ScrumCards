@@ -18,7 +18,8 @@ let appState = {
     cardFlipped: false,
     voteCount: 0,
     playerCount: 0,
-    votedMembers: []
+    votedMembers: [],
+    celebrationEmoji: '🎉'
 };
 
 // Fibonacci scale
@@ -162,13 +163,9 @@ function updateRoleDisplay() {
 
 // Add story (host only)
 function addStory() {
-    const title = document.getElementById('storyTitle').value.trim();
+    const titleInput = document.getElementById('storyTitle').value.trim();
     const description = document.getElementById('storyDescription').value.trim();
-
-    if (!title) {
-        showToast('Please enter a story title', 'warning');
-        return;
-    }
+    const title = titleInput || `Story #${appState.stories.length + 1}`;
 
     socket.emit('addStory', { title, description });
     document.getElementById('storyTitle').value = '';
@@ -371,12 +368,45 @@ function updateHostControls() {
         hostControls.classList.add('hidden');
     }
 
-    // Show/hide story panel for host
+    // Show/hide story panel (and emoji picker inside it) for host
     if (appState.isHost) {
         hostStoryPanel.classList.remove('hidden');
+        const pickerSection = document.getElementById('emojiPickerSection');
+        if (pickerSection) pickerSection.classList.remove('hidden');
+        renderEmojiPicker();
     } else {
         hostStoryPanel.classList.add('hidden');
+        const pickerSection = document.getElementById('emojiPickerSection');
+        if (pickerSection) pickerSection.classList.add('hidden');
     }
+}
+
+// Render the celebration emoji picker (host only)
+const CELEBRATION_EMOJIS = [
+    // Celebration
+    '🎉', '🏆', '🥳', '🌟', '👑',
+    // Fruit
+    '🍓', '🍇', '\uD83C\uDF4C', '🍋', '🍉',
+    // Animals
+    '🦊', '🐸', '🦁', '🐧', '🦄'
+];
+
+function renderEmojiPicker() {
+    const picker = document.getElementById('emojiPicker');
+    if (!picker) return;
+    picker.innerHTML = CELEBRATION_EMOJIS.map(e => `
+        <button onclick="setCelebrationEmoji('${e}')"
+            class="emoji-option text-xl p-1 rounded ${e === appState.celebrationEmoji ? 'selected' : ''}"
+            title="${e}">${e}</button>
+    `).join('');
+}
+
+// Set celebration emoji and broadcast to room (host only)
+function setCelebrationEmoji(emoji) {
+    if (!appState.isHost) return;
+    appState.celebrationEmoji = emoji;
+    socket.emit('setCelebrationEmoji', { emoji });
+    renderEmojiPicker(); // refresh selection highlight
 }
 
 // Reveal votes (host only)
@@ -469,30 +499,49 @@ function showConsensusAnimation(allSame, consensus) {
     }
 }
 
-// Create confetti effect
+// Create confetti effect — emoji rain with chained JS animation phases
 function createConfetti() {
-    const colors = ['#ffd700', '#ff8c00', '#8b5cf6', '#10b981', '#f97316'];
-    
-    for (let i = 0; i < 80; i++) {
-        const confetti = document.createElement('div');
-        confetti.className = 'confetti';
-        confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-        confetti.style.left = Math.random() * 100 + 'vw';
-        confetti.style.top = '-10px';
-        confetti.style.width = (Math.random() * 8 + 6) + 'px';
-        confetti.style.height = (Math.random() * 8 + 6) + 'px';
-        confetti.style.transform = `rotate(${Math.random() * 360}deg)`;
-        document.body.appendChild(confetti);
+    const selected = appState.celebrationEmoji || '🎉';
 
-        const animation = confetti.animate([
-            { top: '-10px', transform: `rotate(0deg) translateX(0)`, opacity: 1 },
-            { top: '100vh', transform: `rotate(${Math.random() * 720}deg) translateX(${(Math.random() - 0.5) * 200}px)`, opacity: 0.5 }
-        ], {
-            duration: 2500 + Math.random() * 1500,
-            easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)'
-        });
+    for (let i = 0; i < 55; i++) {
+        setTimeout(() => {
+            const el = document.createElement('div');
+            el.className = 'confetti-emoji';
+            el.textContent = selected;
+            const drift = (Math.random() - 0.5) * 200;
+            const rotate = (Math.random() - 0.5) * 540;
+            el.style.left = Math.random() * window.innerWidth + 'px';
+            el.style.top = '-50px';
+            el.style.fontSize = (Math.random() * 14 + 18) + 'px';
+            document.body.appendChild(el);
 
-        animation.onfinish = () => confetti.remove();
+            // Phase 1: fall with gravity (ease-in = accelerates into landing)
+            const fallDur = 1600 + Math.random() * 1200;
+            const fall = el.animate([
+                { top: '-50px', transform: `translateX(0px) rotate(0deg)`,             opacity: 1 },
+                { top: '88vh',  transform: `translateX(${drift}px) rotate(${rotate}deg)`, opacity: 1 }
+            ], {
+                duration: fallDur,
+                easing: 'cubic-bezier(0.4, 0, 1, 1)',
+                fill: 'forwards'
+            });
+
+            // Phase 2: squish → spring → settle → fade, zero gap after landing
+            fall.onfinish = () => {
+                const bounce = el.animate([
+                    { transform: `translateX(${drift}px) scaleX(1.55) scaleY(0.5)  translateY(0)`,    opacity: 1,   offset: 0    },
+                    { transform: `translateX(${drift}px) scaleX(0.88) scaleY(1.22) translateY(-24px)`, opacity: 1,   offset: 0.32 },
+                    { transform: `translateX(${drift}px) scaleX(1.06) scaleY(0.96) translateY(5px)`,  opacity: 0.9, offset: 0.58 },
+                    { transform: `translateX(${drift}px) scaleX(1)    scaleY(1)    translateY(0)`,    opacity: 0.7, offset: 0.78 },
+                    { transform: `translateX(${drift}px) scaleX(1)    scaleY(1)    translateY(0)`,    opacity: 0,   offset: 1    }
+                ], {
+                    duration: 720,
+                    easing: 'ease-out',
+                    fill: 'forwards'
+                });
+                bounce.onfinish = () => el.remove();
+            };
+        }, Math.random() * 1000);
     }
 }
 
@@ -798,6 +847,7 @@ socket.on('roomJoined', (data) => {
     appState.votingActive = data.votingActive;
     appState.votesRevealed = data.votesRevealed;
     appState.votes = data.votes;
+    appState.celebrationEmoji = data.celebrationEmoji || '🎉';
     appState.currentRole = 'player';
 
     // Find self and set role
@@ -874,6 +924,11 @@ socket.on('storyAdded', (data) => {
     showToast(`New story added: ${data.story.title}`, 'info');
 });
 
+socket.on('celebrationEmojiChanged', (data) => {
+    appState.celebrationEmoji = data.emoji;
+    if (appState.isHost) renderEmojiPicker();
+});
+
 socket.on('storySelected', (data) => {
     appState.currentStoryIndex = data.currentStoryIndex;
     appState.currentStory = data.currentStory;
@@ -892,6 +947,7 @@ socket.on('storySelected', (data) => {
     resetCardFlip();
     renderCurrentCard();
     renderStoryQueue();
+    renderMembers();
     updateVotingStatus();
     updateHostControls();
     
@@ -998,3 +1054,4 @@ socket.on('connect', () => {
         showToast('Reconnected!', 'success');
     }
 });
+
