@@ -427,35 +427,68 @@
                     </div>
                 </div>
 
-                <div class="text-center text-mystic-400">— or —</div>
-
-                <!-- Join Room -->
-                <div class="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10 hover:border-enchanted-500/50 transition-all">
-                    <h2 class="font-fantasy text-xl text-enchanted-300 mb-4 flex items-center gap-2">
-                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-                        </svg>
-                        Join a Room
-                    </h2>
-                    <div class="space-y-4">
-                        <input type="text" id="joinRoomCode" placeholder="Room Code (e.g., ABC123)" 
-                            class="w-full px-4 py-3 rounded-xl uppercase tracking-widest text-center text-lg focus:ring-2 focus:ring-enchanted-500">
-                        <input type="text" id="joinUserName" placeholder="Your Name" 
-                            class="w-full px-4 py-3 rounded-xl focus:ring-2 focus:ring-enchanted-500">
-                        <button onclick="joinRoom()" 
-                            class="w-full py-3 px-6 bg-gradient-to-r from-enchanted-600 to-enchanted-700 hover:from-enchanted-500 hover:to-enchanted-600 rounded-xl font-semibold transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2">
-                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
-                            </svg>
-                            Join Room
-                        </button>
-                    </div>
-                </div>
             </div>
 
             <!-- Error Message -->
             <div id="errorMessage" class="hidden mt-4 p-4 bg-red-500/20 border border-red-500/50 rounded-xl text-red-300 text-center">
             </div>
+        </div>
+    </div>
+
+    <!-- Join Page (shown when navigating via shared invite link) -->
+    <div id="joinPage" class="hidden min-h-screen flex items-center justify-center p-4 pb-14 relative z-10">
+        <div class="max-w-md w-full">
+            <!-- Logo -->
+            <div class="text-center mb-8">
+                <div class="inline-block animate-float">
+                    <svg class="w-16 h-16 mx-auto mb-3" viewBox="0 0 100 100" fill="none">
+                        <defs>
+                            <linearGradient id="joinCardGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#ffd700"/>
+                                <stop offset="50%" style="stop-color:#ff8c00"/>
+                                <stop offset="100%" style="stop-color:#ffd700"/>
+                            </linearGradient>
+                        </defs>
+                        <rect x="10" y="5" width="50" height="70" rx="5" fill="url(#joinCardGradient)" transform="rotate(-15 35 40)"/>
+                        <rect x="25" y="10" width="50" height="70" rx="5" fill="#8b5cf6" transform="rotate(0 50 45)"/>
+                        <rect x="40" y="15" width="50" height="70" rx="5" fill="#10b981" transform="rotate(15 65 50)"/>
+                        <text x="50" y="55" text-anchor="middle" fill="white" font-size="24" font-weight="bold">?</text>
+                    </svg>
+                </div>
+                <h1 class="font-fantasy text-4xl font-bold bg-gradient-to-r from-yellow-400 via-orange-400 to-yellow-400 bg-clip-text text-transparent mb-2">Point Battle</h1>
+                <p class="text-mystic-300">Planning Poker for Agile Teams</p>
+            </div>
+
+            <!-- Join Card -->
+            <div id="joinFormCard" class="bg-white/5 backdrop-blur-lg rounded-2xl p-6 border border-white/10 hover:border-enchanted-500/50 transition-all">
+                <h2 class="font-fantasy text-xl text-enchanted-300 mb-1 flex items-center gap-2">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                    </svg>
+                    You're invited to join
+                </h2>
+                <p id="joinRoomNameDisplay" class="font-fantasy text-2xl text-white font-bold mb-6"></p>
+                <div class="space-y-4">
+                    <input type="text" id="joinUrlUserName" placeholder="Your Name"
+                        class="w-full px-4 py-3 rounded-xl focus:ring-2 focus:ring-enchanted-500"
+                        onkeydown="if(event.key==='Enter') joinViaUrl()">
+                    <button onclick="joinViaUrl()"
+                        class="w-full py-3 px-6 bg-gradient-to-r from-enchanted-600 to-enchanted-700 hover:from-enchanted-500 hover:to-enchanted-600 rounded-xl font-semibold transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+                        </svg>
+                        Join Room
+                    </button>
+                </div>
+            </div>
+
+            <!-- Room not found -->
+            <div id="joinNotFound" class="hidden mt-4 p-4 bg-red-500/20 border border-red-500/50 rounded-xl text-red-300 text-center">
+                Room not found. It may have ended or the link may be invalid.
+            </div>
+
+            <!-- Join error -->
+            <div id="joinUrlError" class="hidden mt-4 p-4 bg-red-500/20 border border-red-500/50 rounded-xl text-red-300 text-center"></div>
         </div>
     </div>
 
@@ -472,15 +505,14 @@
                         </svg>
                         <span id="roomNameDisplay" class="font-fantasy text-lg text-white"></span>
                     </div>
-                    <div class="flex items-center gap-2 bg-mystic-600/30 px-3 py-1 rounded-lg">
-                        <span class="text-mystic-300 text-sm">Code:</span>
-                        <span id="roomCodeDisplay" class="font-mono font-bold text-mystic-200 tracking-widest"></span>
-                        <button onclick="copyRoomCode()" class="text-mystic-300 hover:text-white transition-colors" title="Copy Code">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-                            </svg>
-                        </button>
-                    </div>
+                    <button onclick="copyInviteLink()"
+                        class="flex items-center gap-2 bg-mystic-600/30 hover:bg-mystic-600/50 px-3 py-1.5 rounded-lg text-mystic-200 hover:text-white transition-all text-sm font-semibold"
+                        title="Copy invite link">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                        </svg>
+                        Copy Invite Link
+                    </button>
                 </div>
 
                 <!-- Role Toggle & Exit -->

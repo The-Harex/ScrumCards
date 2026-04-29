@@ -11,6 +11,16 @@ const io = new Server(server);
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Room lookup API (for join-by-URL)
+app.get('/api/room/:code', (req, res) => {
+    const code = req.params.code.toUpperCase();
+    const room = rooms.get(code);
+    if (!room) {
+        return res.status(404).json({ error: 'Room not found' });
+    }
+    res.json({ name: room.name });
+});
+
 // Store rooms in memory
 const rooms = new Map();
 

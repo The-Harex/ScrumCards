@@ -28,11 +28,37 @@ const FIBONACCI_SCALE = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, '?', '☕'];
 // DOM Elements
 const homePage = document.getElementById('homePage');
 const roomPage = document.getElementById('roomPage');
+const joinPage = document.getElementById('joinPage');
+
+// Room code from invite URL (set on page load if ?room= param is present)
+let pendingJoinRoomCode = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     generateStars();
     renderFibonacciCards();
+
+    // Check for invite URL (?room=XXXXXX)
+    const params = new URLSearchParams(window.location.search);
+    const roomParam = params.get('room');
+    if (roomParam) {
+        pendingJoinRoomCode = roomParam.toUpperCase();
+        homePage.classList.add('hidden');
+        joinPage.classList.remove('hidden');
+        fetch(`/api/room/${encodeURIComponent(pendingJoinRoomCode)}`)
+            .then(res => {
+                if (!res.ok) throw new Error('not found');
+                return res.json();
+            })
+            .then(data => {
+                document.getElementById('joinRoomNameDisplay').textContent = data.name;
+            })
+            .catch(() => {
+                document.getElementById('joinRoomNameDisplay').textContent = '';
+                document.getElementById('joinNotFound').classList.remove('hidden');
+                document.getElementById('joinFormCard').classList.add('opacity-50', 'pointer-events-none');
+            });
+    }
 });
 
 // Generate background stars
@@ -74,17 +100,22 @@ function createRoom() {
     socket.emit('createRoom', { roomName, userName });
 }
 
-// Join Room
-function joinRoom() {
-    const roomCode = document.getElementById('joinRoomCode').value.trim().toUpperCase();
-    const userName = document.getElementById('joinUserName').value.trim();
-
-    if (!roomCode || !userName) {
-        showError('Please fill in all fields');
+// Join via invite URL
+function joinViaUrl() {
+    const userName = document.getElementById('joinUrlUserName').value.trim();
+    if (!userName) {
+        showJoinUrlError('Please enter your name');
         return;
     }
+    socket.emit('joinRoom', { roomCode: pendingJoinRoomCode, userName });
+}
 
-    socket.emit('joinRoom', { roomCode, userName });
+// Show error on join page
+function showJoinUrlError(message) {
+    const errorDiv = document.getElementById('joinUrlError');
+    errorDiv.textContent = message;
+    errorDiv.classList.remove('hidden');
+    setTimeout(() => errorDiv.classList.add('hidden'), 5000);
 }
 
 // Show error message
@@ -117,10 +148,11 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
-// Copy room code to clipboard
-function copyRoomCode() {
-    navigator.clipboard.writeText(appState.roomCode);
-    showToast('Room code copied!', 'success');
+// Copy invite link to clipboard
+function copyInviteLink() {
+    const url = window.location.origin + window.location.pathname + '?room=' + appState.roomCode;
+    navigator.clipboard.writeText(url);
+    showToast('Invite link copied!', 'success');
 }
 
 // Toggle role (player/spectator)
@@ -799,20 +831,20 @@ function viewHistoricalCard(storyIndex) {
 function leaveRoom() {
     if (confirm('Are you sure you want to leave the room?')) {
         socket.emit('leaveRoom');
-        window.location.reload();
+        window.location.href = window.location.origin + window.location.pathname;
     }
 }
 
 // Switch to room view
 function switchToRoom() {
     homePage.classList.add('hidden');
+    joinPage.classList.add('hidden');
     roomPage.classList.remove('hidden');
 }
 
 // Update room display
 function updateRoomDisplay() {
     document.getElementById('roomNameDisplay').textContent = appState.roomName;
-    document.getElementById('roomCodeDisplay').textContent = appState.roomCode;
 }
 
 // === Socket Event Handlers ===
@@ -831,9 +863,10 @@ socket.on('roomCreated', (data) => {
     renderMembers();
     renderStoryQueue();
     updateVotingStatus();
+    history.replaceState(null, '', window.location.pathname + '?room=' + data.roomCode);
     switchToRoom();
 
-    showToast(`Room created! Code: ${data.roomCode}`, 'success');
+    showToast(`Room "${data.roomName}" created!`, 'success');
 });
 
 socket.on('roomJoined', (data) => {
@@ -868,12 +901,17 @@ socket.on('roomJoined', (data) => {
         renderVoteResults(appState.votes);
     }
 
+    history.replaceState(null, '', window.location.pathname + '?room=' + data.roomCode);
     switchToRoom();
     showToast(`Joined room: ${data.roomName}`, 'success');
 });
 
 socket.on('error', (data) => {
-    showError(data.message);
+    if (pendingJoinRoomCode && !joinPage.classList.contains('hidden')) {
+        showJoinUrlError(data.message);
+    } else {
+        showError(data.message);
+    }
     showToast(data.message, 'error');
 });
 
