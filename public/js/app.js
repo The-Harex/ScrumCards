@@ -235,9 +235,20 @@ function renderStoryQueue() {
                         ${story.description ? `<p class="text-xs text-gray-400 truncate mt-1">${story.description}</p>` : ''}
                     </div>
                     ${isCompleted ? `
-                        <span class="flex-shrink-0 w-8 h-8 bg-enchanted-500/30 border border-enchanted-400 rounded-full flex items-center justify-center">
-                            <span class="font-bold text-sm text-enchanted-300">${story.finalPoints}</span>
-                        </span>
+                        <div class="relative flex-shrink-0">
+                            <span class="w-8 h-8 bg-enchanted-500/30 border border-enchanted-400 rounded-full flex items-center justify-center">
+                                <span class="font-bold text-sm text-enchanted-300">${story.finalPoints}</span>
+                            </span>
+                            ${appState.isHost ? `
+                                <button onclick="event.stopPropagation(); revoteStory(${index})"
+                                    class="absolute -top-1 -right-1 w-4 h-4 bg-flame-600 hover:bg-flame-500 rounded-full flex items-center justify-center transition-colors shadow"
+                                    title="Revote">
+                                    <svg class="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                    </svg>
+                                </button>
+                            ` : ''}
+                        </div>
                     ` : isCurrent ? `
                         <span class="flex-shrink-0">
                             <svg class="w-5 h-5 text-yellow-400 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
@@ -393,11 +404,20 @@ function updateVotingStatus() {
 function updateHostControls() {
     const hostControls = document.getElementById('hostControls');
     const hostStoryPanel = document.getElementById('hostStoryPanel');
+    const revoteControls = document.getElementById('revoteControls');
 
     if (appState.isHost && appState.votingActive && !appState.votesRevealed) {
         hostControls.classList.remove('hidden');
     } else {
         hostControls.classList.add('hidden');
+    }
+
+    if (revoteControls) {
+        if (appState.isHost && appState.votesRevealed && appState.currentStory && appState.currentStory.finalPoints !== null) {
+            revoteControls.classList.remove('hidden');
+        } else {
+            revoteControls.classList.add('hidden');
+        }
     }
 
     // Show/hide story panel (and emoji picker inside it) for host
@@ -821,6 +841,18 @@ function renderHistory() {
     }).join('');
 }
 
+// Revote the currently displayed story (called from center card button)
+function revoteCurrentStory() {
+    if (!appState.isHost) return;
+    revoteStory(appState.currentStoryIndex);
+}
+
+// Revote a completed story (host only)
+function revoteStory(index) {
+    if (!appState.isHost) return;
+    socket.emit('revoteStory', { storyIndex: index });
+}
+
 // View historical card
 function viewHistoricalCard(storyIndex) {
     if (!appState.isHost) return;
@@ -956,6 +988,36 @@ socket.on('hostChanged', (data) => {
     showToast(`${data.newHost.name} is now the host`, 'info');
 });
 
+socket.on('revoteStarted', (data) => {
+    appState.currentStoryIndex = data.storyIndex;
+    appState.currentStory = data.story;
+    appState.stories = data.stories;
+    appState.votingActive = true;
+    appState.votesRevealed = false;
+    appState.myVote = null;
+    appState.votes = {};
+    appState.voteCount = 0;
+    appState.votedMembers = [];
+
+    document.querySelectorAll('.vote-card').forEach(card => {
+        card.classList.remove('selected', 'from-enchanted-500', 'to-enchanted-700', 'border-enchanted-300');
+    });
+
+    resetCardFlip();
+    renderCurrentCard();
+    renderStoryQueue();
+    renderMembers();
+    updateVotingStatus();
+    updateHostControls();
+
+    document.getElementById('hostPointsOnCard').classList.add('hidden');
+    document.getElementById('pointsAssignment').classList.add('hidden');
+    document.getElementById('resultBanner').classList.add('hidden');
+    document.getElementById('consensusStatus').innerHTML = '';
+
+    showToast(`Revote started: ${data.story.title}`, 'info');
+});
+
 socket.on('storyAdded', (data) => {
     appState.stories = data.stories;
     renderStoryQueue();
@@ -1060,6 +1122,7 @@ socket.on('pointsAssigned', (data) => {
     document.getElementById('consensusStatus').innerHTML = '';
     
     showToast(`Story assigned ${data.story.finalPoints} points`, 'success');
+    updateHostControls();
 });
 
 socket.on('viewingHistoricalCard', (data) => {

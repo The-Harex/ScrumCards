@@ -331,6 +331,35 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Revote a completed story (Host only)
+    socket.on('revoteStory', ({ storyIndex }) => {
+        const room = rooms.get(socket.roomCode);
+        if (!room) return;
+
+        const member = room.members.get(socket.id);
+        if (!member || !member.isHost) return;
+
+        if (storyIndex < 0 || storyIndex >= room.stories.length) return;
+
+        const story = room.stories[storyIndex];
+        story.finalPoints = null;
+        story.votes = {};
+        story.votedAt = null;
+
+        room.currentStoryIndex = storyIndex;
+        room.votes.clear();
+        room.votingActive = true;
+        room.votesRevealed = false;
+
+        io.to(room.code).emit('revoteStarted', {
+            storyIndex,
+            story,
+            stories: room.stories
+        });
+
+        console.log(`Revote started for story ${storyIndex} in room ${room.code}`);
+    });
+
     // Handle disconnection
     socket.on('disconnect', () => {
         const roomCode = socket.roomCode;

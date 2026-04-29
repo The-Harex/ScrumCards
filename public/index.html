@@ -493,7 +493,7 @@
     </div>
 
     <!-- Room Page -->
-    <div id="roomPage" class="hidden min-h-screen flex flex-col relative z-10 pb-10 overflow-auto">
+    <div id="roomPage" class="hidden min-h-screen flex flex-col relative z-10 pb-10 lg:h-screen lg:overflow-hidden">
         <!-- Header -->
         <header class="bg-black/30 backdrop-blur-lg border-b border-white/10 px-4 py-3">
             <div class="flex items-center justify-between max-w-screen-2xl mx-auto">
@@ -540,7 +540,7 @@
         <!-- Main Content - 3 Column Layout -->
         <main class="flex-1 flex flex-col lg:flex-row overflow-auto pb-10 min-h-0">
             <!-- Left Panel - Story Management (15%) -->
-            <aside class="w-full lg:w-[15%] lg:min-w-[200px] bg-black/20 border-b lg:border-b-0 lg:border-r border-white/10 p-4 pb-6 flex flex-col overflow-y-auto scroll-hidden">
+            <aside class="w-full lg:w-[15%] lg:min-w-[200px] bg-black/20 border-b lg:border-b-0 lg:border-r border-white/10 p-4 pb-6 flex flex-col lg:overflow-hidden">
                 <div id="hostStoryPanel">
                     <h3 class="font-fantasy text-lg text-mystic-300 mb-4 flex items-center gap-2">
                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -692,6 +692,17 @@
 
                     <!-- Points Assignment - Hidden, only shown on card back -->
                     <div id="pointsAssignment" class="hidden"></div>
+
+                    <!-- Revote Control (host only, shown when viewing a completed story) -->
+                    <div id="revoteControls" class="hidden mt-4 flex justify-center">
+                        <button onclick="revoteCurrentStory()"
+                            class="px-6 py-3 bg-gradient-to-r from-flame-600 to-flame-700 hover:from-flame-500 hover:to-flame-600 rounded-xl font-bold text-white transition-all transform hover:scale-105 flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            Revote
+                        </button>
+                    </div>
                 </div>
             </section>
 
