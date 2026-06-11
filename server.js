@@ -36,12 +36,61 @@ function generateRoomCode() {
 
 // Fibonacci scale for voting
 const FIBONACCI_SCALE = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, '?', '☕'];
+const ALLOWED_POINT_VALUES = new Set(FIBONACCI_SCALE.map(String));
+const ALLOWED_CELEBRATION_EMOJIS = ['🎉', '🏆', '🥳', '🌟', '👑', '🍓', '🍇', '🍌', '🍋', '🍉', '🦊', '🐸', '🦁', '🐧', '🦄'];
+const ROOM_CODE_PATTERN = /^[A-Z2-9]{6}$/;
+const MAX_NAME_LENGTH = 60;
+const MAX_ROOM_NAME_LENGTH = 100;
+const MAX_STORY_TITLE_LENGTH = 120;
+const MAX_STORY_DESCRIPTION_LENGTH = 1000;
+
+function cleanText(value, maxLength) {
+    if (typeof value !== 'string') return '';
+    return value.trim().slice(0, maxLength);
+}
+
+function normalizeRoomCode(value) {
+    if (typeof value !== 'string') return null;
+    const code = value.trim().toUpperCase();
+    return ROOM_CODE_PATTERN.test(code) ? code : null;
+}
+
+function normalizePointValue(value) {
+    const normalized = String(value);
+    return ALLOWED_POINT_VALUES.has(normalized) ? normalized : null;
+}
+
+function getCurrentStory(room) {
+    const index = room.currentStoryIndex;
+    if (!Number.isInteger(index) || index < 0 || index >= room.stories.length) return null;
+    return room.stories[index];
+}
+
+function getVoteStatus(room) {
+    const players = Array.from(room.members.values()).filter(m => m.role === 'player');
+    return {
+        voteCount: room.votes.size,
+        playerCount: players.length,
+        votedMembers: Array.from(room.votes.keys())
+    };
+}
+
+function emitVoteUpdate(room) {
+    io.to(room.code).emit('voteUpdate', getVoteStatus(room));
+}
 
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
     // Create a new room
-    socket.on('createRoom', ({ roomName, userName }) => {
+    socket.on('createRoom', (payload = {}) => {
+        const roomName = cleanText(payload.roomName, MAX_ROOM_NAME_LENGTH);
+        const userName = cleanText(payload.userName, MAX_NAME_LENGTH);
+        if (!roomName || !userName) {
+            socket.emit('error', { message: 'Room name and your name are required.' });
+            return;
+        }
+
         const roomCode = generateRoomCode();
         const room = {
             code: roomCode,
@@ -75,15 +124,23 @@ io.on('connection', (socket) => {
             roomName,
             isHost: true,
             members: Array.from(room.members.values()),
-            stories: room.stories
+            stories: room.stories,
+            ...getVoteStatus(room)
         });
 
         console.log(`Room created: ${roomCode} by ${userName}`);
     });
 
     // Join an existing room
-    socket.on('joinRoom', ({ roomCode, userName }) => {
-        const room = rooms.get(roomCode.toUpperCase());
+    socket.on('joinRoom', (payload = {}) => {
+        const roomCode = normalizeRoomCode(payload.roomCode);
+        const userName = cleanText(payload.userName, MAX_NAME_LENGTH);
+        if (!roomCode || !userName) {
+            socket.emit('error', { message: 'Room code and your name are required.' });
+            return;
+        }
+
+        const room = rooms.get(roomCode);
 
         if (!room) {
             socket.emit('error', { message: 'Room not found. Please check the code and try again.' });
@@ -105,11 +162,11 @@ io.on('connection', (socket) => {
             joinedAt: new Date()
         });
 
-        socket.join(roomCode.toUpperCase());
-        socket.roomCode = roomCode.toUpperCase();
+        socket.join(roomCode);
+        socket.roomCode = roomCode;
 
         // Get current story if any
-        const currentStory = room.currentStoryIndex >= 0 ? room.stories[room.currentStoryIndex] : null;
+        const currentStory = getCurrentStory(room);
 
         socket.emit('roomJoined', {
             roomCode: room.code,
@@ -122,7 +179,8 @@ io.on('connection', (socket) => {
             votingActive: room.votingActive,
             votesRevealed: room.votesRevealed,
             votes: room.votesRevealed ? Object.fromEntries(room.votes) : {},
-            celebrationEmoji: room.celebrationEmoji
+            celebrationEmoji: room.celebrationEmoji,
+            ...getVoteStatus(room)
         });
 
         // Notify others
@@ -130,6 +188,7 @@ io.on('connection', (socket) => {
             member: room.members.get(socket.id),
             members: Array.from(room.members.values())
         });
+        emitVoteUpdate(room);
 
         console.log(`${userName} joined room ${roomCode}`);
     });
@@ -154,15 +213,46 @@ io.on('connection', (socket) => {
             members: Array.from(room.members.values()),
             votes: room.votesRevealed ? Object.fromEntries(room.votes) : {}
         });
+        emitVoteUpdate(room);
     });
 
-    // Add a new story (Host only)
-    socket.on('addStory', ({ title, description }) => {
+    // Designate a new host (Host only)
+    socket.on('designateHost', (payload = {}) => {
         const room = rooms.get(socket.roomCode);
         if (!room) return;
 
         const member = room.members.get(socket.id);
         if (!member || !member.isHost) return;
+
+        const newHostId = typeof payload.memberId === 'string' ? payload.memberId : '';
+        const newHost = room.members.get(newHostId);
+        if (!newHost || newHost.id === socket.id) return;
+
+        for (const roomMember of room.members.values()) {
+            roomMember.isHost = false;
+        }
+
+        newHost.isHost = true;
+        newHost.role = 'player';
+        room.hostId = newHost.id;
+
+        io.to(room.code).emit('hostChanged', {
+            newHost,
+            members: Array.from(room.members.values())
+        });
+        emitVoteUpdate(room);
+    });
+
+    // Add a new story (Host only)
+    socket.on('addStory', (payload = {}) => {
+        const room = rooms.get(socket.roomCode);
+        if (!room) return;
+
+        const member = room.members.get(socket.id);
+        if (!member || !member.isHost) return;
+
+        const title = cleanText(payload.title, MAX_STORY_TITLE_LENGTH) || `Story #${room.stories.length + 1}`;
+        const description = cleanText(payload.description, MAX_STORY_DESCRIPTION_LENGTH);
 
         const story = {
             id: uuidv4(),
@@ -183,25 +273,29 @@ io.on('connection', (socket) => {
     });
 
     // Set celebration emoji (Host only)
-    socket.on('setCelebrationEmoji', ({ emoji }) => {
+    socket.on('setCelebrationEmoji', (payload = {}) => {
         const room = rooms.get(socket.roomCode);
         if (!room) return;
         const member = room.members.get(socket.id);
         if (!member || !member.isHost) return;
-        // Only allow a small safe set of known emoji values
-        const allowed = ['🎉','🎊','🏆','🥳','🌟','⭐','✨','💫','🚀','🎯','🔥','💎','👑','🎆','🎇'];
-        if (!allowed.includes(emoji)) return;
+
+        const emoji = payload.emoji;
+        if (!ALLOWED_CELEBRATION_EMOJIS.includes(emoji)) return;
         room.celebrationEmoji = emoji;
         io.to(room.code).emit('celebrationEmojiChanged', { emoji });
     });
 
     // Select a story to vote on (Host only)
-    socket.on('selectStory', ({ storyIndex }) => {
+    socket.on('selectStory', (payload = {}) => {
         const room = rooms.get(socket.roomCode);
         if (!room) return;
 
         const member = room.members.get(socket.id);
         if (!member || !member.isHost) return;
+
+        const storyIndex = Number(payload.storyIndex);
+        if (!Number.isInteger(storyIndex) || storyIndex < 0 || storyIndex >= room.stories.length) return;
+        if (room.stories[storyIndex].finalPoints !== null) return;
 
         room.currentStoryIndex = storyIndex;
         room.votes.clear();
@@ -212,31 +306,30 @@ io.on('connection', (socket) => {
             currentStoryIndex: storyIndex,
             currentStory: room.stories[storyIndex],
             votingActive: true,
-            votesRevealed: false
+            votesRevealed: false,
+            ...getVoteStatus(room)
         });
     });
 
     // Cast a vote
-    socket.on('vote', ({ value }) => {
+    socket.on('vote', (payload = {}) => {
         const room = rooms.get(socket.roomCode);
-        if (!room || !room.votingActive || room.votesRevealed) return;
+        if (!room || !room.votingActive || room.votesRevealed || !getCurrentStory(room)) return;
 
         const member = room.members.get(socket.id);
         if (!member || member.role !== 'player') return;
 
+        const value = normalizePointValue(payload.value);
+        if (value === null) return;
+
         room.votes.set(socket.id, {
-            oderId: socket.id,
-            odeName: member.name,
+            voterId: socket.id,
+            voterName: member.name,
             value
         });
 
         // Send vote count update (not revealing actual votes)
-        const players = Array.from(room.members.values()).filter(m => m.role === 'player');
-        io.to(room.code).emit('voteUpdate', {
-            voteCount: room.votes.size,
-            playerCount: players.length,
-            votedMembers: Array.from(room.votes.keys())
-        });
+        emitVoteUpdate(room);
     });
 
     // Reveal votes (Host only)
@@ -246,6 +339,7 @@ io.on('connection', (socket) => {
 
         const member = room.members.get(socket.id);
         if (!member || !member.isHost) return;
+        if (!getCurrentStory(room)) return;
 
         // Start countdown
         io.to(room.code).emit('countdownStarted');
@@ -272,15 +366,16 @@ io.on('connection', (socket) => {
     });
 
     // Assign final points (Host only, when no consensus)
-    socket.on('assignPoints', ({ points }) => {
+    socket.on('assignPoints', (payload = {}) => {
         const room = rooms.get(socket.roomCode);
         if (!room) return;
 
         const member = room.members.get(socket.id);
         if (!member || !member.isHost) return;
 
-        if (room.currentStoryIndex >= 0) {
-            const story = room.stories[room.currentStoryIndex];
+        const points = normalizePointValue(payload.points);
+        const story = getCurrentStory(room);
+        if (points !== null && story) {
             story.finalPoints = points;
             story.votes = Object.fromEntries(room.votes);
             story.votedAt = new Date();
@@ -294,15 +389,16 @@ io.on('connection', (socket) => {
     });
 
     // Accept consensus points
-    socket.on('acceptConsensus', ({ points }) => {
+    socket.on('acceptConsensus', (payload = {}) => {
         const room = rooms.get(socket.roomCode);
         if (!room) return;
 
         const member = room.members.get(socket.id);
         if (!member || !member.isHost) return;
 
-        if (room.currentStoryIndex >= 0) {
-            const story = room.stories[room.currentStoryIndex];
+        const points = normalizePointValue(payload.points);
+        const story = getCurrentStory(room);
+        if (points !== null && story) {
             story.finalPoints = points;
             story.votes = Object.fromEntries(room.votes);
             story.votedAt = new Date();
@@ -316,14 +412,15 @@ io.on('connection', (socket) => {
     });
 
     // View historical card
-    socket.on('viewHistoricalCard', ({ storyIndex }) => {
+    socket.on('viewHistoricalCard', (payload = {}) => {
         const room = rooms.get(socket.roomCode);
         if (!room) return;
 
         const member = room.members.get(socket.id);
         if (!member || !member.isHost) return;
 
-        if (storyIndex >= 0 && storyIndex < room.stories.length) {
+        const storyIndex = Number(payload.storyIndex);
+        if (Number.isInteger(storyIndex) && storyIndex >= 0 && storyIndex < room.stories.length) {
             io.to(room.code).emit('viewingHistoricalCard', {
                 storyIndex,
                 story: room.stories[storyIndex]
@@ -332,14 +429,15 @@ io.on('connection', (socket) => {
     });
 
     // Revote a completed story (Host only)
-    socket.on('revoteStory', ({ storyIndex }) => {
+    socket.on('revoteStory', (payload = {}) => {
         const room = rooms.get(socket.roomCode);
         if (!room) return;
 
         const member = room.members.get(socket.id);
         if (!member || !member.isHost) return;
 
-        if (storyIndex < 0 || storyIndex >= room.stories.length) return;
+        const storyIndex = Number(payload.storyIndex);
+        if (!Number.isInteger(storyIndex) || storyIndex < 0 || storyIndex >= room.stories.length) return;
 
         const story = room.stories[storyIndex];
         story.finalPoints = null;
@@ -354,7 +452,8 @@ io.on('connection', (socket) => {
         io.to(room.code).emit('revoteStarted', {
             storyIndex,
             story,
-            stories: room.stories
+            stories: room.stories,
+            ...getVoteStatus(room)
         });
 
         console.log(`Revote started for story ${storyIndex} in room ${room.code}`);

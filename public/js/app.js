@@ -5,6 +5,7 @@ const socket = io();
 let appState = {
     roomCode: null,
     roomName: null,
+    userName: null,
     isHost: false,
     currentRole: 'player',
     members: [],
@@ -19,11 +20,28 @@ let appState = {
     voteCount: 0,
     playerCount: 0,
     votedMembers: [],
-    celebrationEmoji: '🎉'
+    celebrationEmoji: '🎉',
+    wasDisconnected: false
 };
 
 // Fibonacci scale
 const FIBONACCI_SCALE = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, '?', '☕'];
+
+const HTML_ESCAPE_CHARS = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+};
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => HTML_ESCAPE_CHARS[char]);
+}
+
+function jsStringLiteral(value) {
+    return JSON.stringify(String(value));
+}
 
 // DOM Elements
 const homePage = document.getElementById('homePage');
@@ -32,6 +50,7 @@ const joinPage = document.getElementById('joinPage');
 
 // Room code from invite URL (set on page load if ?room= param is present)
 let pendingJoinRoomCode = null;
+let pendingUserName = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -79,10 +98,10 @@ function generateStars() {
 function renderFibonacciCards() {
     const container = document.getElementById('fibonacciCards');
     container.innerHTML = FIBONACCI_SCALE.map(value => `
-        <button onclick="castVote('${value}')" 
+        <button onclick='castVote(${jsStringLiteral(value)})'
             class="vote-card w-12 h-16 md:w-14 md:h-20 bg-gradient-to-br from-mystic-600 to-mystic-800 rounded-lg border-2 border-mystic-400/50 flex items-center justify-center font-fantasy text-lg md:text-xl font-bold text-white hover:border-yellow-400 transition-all"
-            data-value="${value}">
-            ${value}
+            data-value="${escapeHtml(value)}">
+            ${escapeHtml(value)}
         </button>
     `).join('');
 }
@@ -97,6 +116,7 @@ function createRoom() {
         return;
     }
 
+    pendingUserName = userName;
     socket.emit('createRoom', { roomName, userName });
 }
 
@@ -107,6 +127,7 @@ function joinViaUrl() {
         showJoinUrlError('Please enter your name');
         return;
     }
+    pendingUserName = userName;
     socket.emit('joinRoom', { roomCode: pendingJoinRoomCode, userName });
 }
 
@@ -220,6 +241,9 @@ function renderStoryQueue() {
     container.innerHTML = appState.stories.map((story, index) => {
         const isCurrent = index === appState.currentStoryIndex;
         const isCompleted = story.finalPoints !== null;
+        const storyTitle = escapeHtml(story.title);
+        const storyDescription = escapeHtml(story.description);
+        const finalPoints = escapeHtml(story.finalPoints);
         
         return `
             <div class="p-3 rounded-lg border transition-all cursor-pointer ${
@@ -229,15 +253,15 @@ function renderStoryQueue() {
                         ? 'bg-enchanted-500/10 border-enchanted-500/30' 
                         : 'bg-white/5 border-white/10 hover:border-mystic-500/50'
             }" onclick="selectStory(${index})">
-                <div class="flex items-start justify-between gap-2">
-                    <div class="flex-1 min-w-0">
-                        <h4 class="font-semibold text-sm truncate ${isCurrent ? 'text-yellow-300' : 'text-white'}">${story.title}</h4>
-                        ${story.description ? `<p class="text-xs text-gray-400 truncate mt-1">${story.description}</p>` : ''}
+            <div class="flex items-start justify-between gap-2">
+                <div class="flex-1 min-w-0">
+                        <h4 class="font-semibold text-sm truncate ${isCurrent ? 'text-yellow-300' : 'text-white'}">${storyTitle}</h4>
+                        ${story.description ? `<p class="text-xs text-gray-400 truncate mt-1">${storyDescription}</p>` : ''}
                     </div>
                     ${isCompleted ? `
                         <div class="relative flex-shrink-0">
                             <span class="w-8 h-8 bg-enchanted-500/30 border border-enchanted-400 rounded-full flex items-center justify-center">
-                                <span class="font-bold text-sm text-enchanted-300">${story.finalPoints}</span>
+                                <span class="font-bold text-sm text-enchanted-300">${finalPoints}</span>
                             </span>
                             ${appState.isHost ? `
                                 <button onclick="event.stopPropagation(); revoteStory(${index})"
@@ -267,6 +291,7 @@ function selectStory(index) {
     if (!appState.isHost) return;
     
     const story = appState.stories[index];
+    if (!story) return;
     if (story.finalPoints !== null) {
         // Show historical card instead of selecting for vote
         socket.emit('viewHistoricalCard', { storyIndex: index });
@@ -346,8 +371,8 @@ function renderVoteResults(votes) {
 
     container.innerHTML = voteEntries.map(vote => `
         <div class="flex items-center justify-between p-2 bg-white/5 rounded-lg">
-            <span class="text-sm text-gray-300">${vote.odeName || vote.voterName}</span>
-            <span class="font-bold text-lg text-yellow-400">${vote.value}</span>
+            <span class="text-sm text-gray-300">${escapeHtml(vote.voterName || vote.odeName)}</span>
+            <span class="font-bold text-lg text-yellow-400">${escapeHtml(vote.value)}</span>
         </div>
     `).join('');
 }
@@ -447,18 +472,16 @@ function renderEmojiPicker() {
     const picker = document.getElementById('emojiPicker');
     if (!picker) return;
     picker.innerHTML = CELEBRATION_EMOJIS.map(e => `
-        <button onclick="setCelebrationEmoji('${e}')"
+        <button onclick='setCelebrationEmoji(${jsStringLiteral(e)})'
             class="emoji-option text-xl p-1 rounded ${e === appState.celebrationEmoji ? 'selected' : ''}"
-            title="${e}">${e}</button>
+            title="${escapeHtml(e)}">${escapeHtml(e)}</button>
     `).join('');
 }
 
 // Set celebration emoji and broadcast to room (host only)
 function setCelebrationEmoji(emoji) {
     if (!appState.isHost) return;
-    appState.celebrationEmoji = emoji;
     socket.emit('setCelebrationEmoji', { emoji });
-    renderEmojiPicker(); // refresh selection highlight
 }
 
 // Reveal votes (host only)
@@ -673,9 +696,9 @@ function showPointsAssignment() {
     }
     
     const buttonsHtml = allUniqueVotes.map(value => `
-        <button onclick="assignPoints(${typeof value === 'number' ? value : "'" + value + "'"})"
+        <button onclick='assignPoints(${jsStringLiteral(value)})'
             class="point-option-btn w-12 h-12 bg-gradient-to-br from-flame-500 to-flame-700 hover:from-flame-400 hover:to-flame-600 rounded-lg font-fantasy text-lg font-bold text-white border-2 border-flame-400 shadow-lg shadow-flame-500/30 transition-all transform hover:scale-110">
-            ${value}
+            ${escapeHtml(value)}
         </button>
     `).join('');
     
@@ -716,15 +739,16 @@ function renderConsensusStatus(allSame, consensus) {
     const hostPointsOnCard = document.getElementById('hostPointsOnCard');
 
     if (allSame && consensus !== null) {
+        const consensusValue = escapeHtml(consensus);
         hostPointsOnCard.classList.add('hidden');
         container.innerHTML = `
             <div class="text-center">
                 <div class="inline-flex items-center gap-3">
                     <div class="w-14 h-14 bg-gradient-to-br from-enchanted-400 to-enchanted-600 rounded-full flex items-center justify-center border-2 border-enchanted-300 shadow-lg shadow-enchanted-500/50">
-                        <span class="font-fantasy text-2xl font-bold text-white">${consensus}</span>
+                        <span class="font-fantasy text-2xl font-bold text-white">${consensusValue}</span>
                     </div>
                     ${appState.isHost ? `
-                        <button onclick="acceptConsensus(${typeof consensus === 'number' ? consensus : "'" + consensus + "'"})" 
+                        <button onclick='acceptConsensus(${jsStringLiteral(consensus)})'
                             class="px-4 py-2 bg-gradient-to-r from-enchanted-500 to-enchanted-600 hover:from-enchanted-400 hover:to-enchanted-500 rounded-lg text-sm font-bold text-white transition-all transform hover:scale-105 shadow-lg">
                             ✓ Accept
                         </button>
@@ -747,6 +771,9 @@ function renderMembers() {
 
     container.innerHTML = appState.members.map(member => {
         const hasVoted = appState.votedMembers.includes(member.id);
+        const memberName = escapeHtml(member.name);
+        const memberRole = escapeHtml(member.role);
+        const canDesignateHost = appState.isHost && !member.isHost;
         
         return `
             <div class="member-badge p-2 rounded-lg ${member.isHost ? 'bg-yellow-500/20 border border-yellow-500/30' : 'bg-white/5 border border-white/10'} flex items-center gap-2">
@@ -754,8 +781,8 @@ function renderMembers() {
                     ${getMemberIcon(member)}
                 </div>
                 <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-sm truncate ${member.isHost ? 'text-yellow-300' : 'text-white'}">${member.name}</p>
-                    <p class="text-xs ${member.role === 'player' ? 'text-enchanted-400' : 'text-gray-400'}">${member.role}</p>
+                    <p class="font-semibold text-sm truncate ${member.isHost ? 'text-yellow-300' : 'text-white'}">${memberName}</p>
+                    <p class="text-xs ${member.role === 'player' ? 'text-enchanted-400' : 'text-gray-400'}">${memberRole}</p>
                 </div>
                 ${appState.votingActive && member.role === 'player' ? `
                     <div class="flex-shrink-0">
@@ -764,6 +791,15 @@ function renderMembers() {
                             : `<svg class="w-5 h-5 text-gray-500 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`
                         }
                     </div>
+                ` : ''}
+                ${canDesignateHost ? `
+                    <button onclick='designateHost(${jsStringLiteral(member.id)})'
+                        class="flex-shrink-0 w-7 h-7 bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-500/40 rounded-lg flex items-center justify-center transition-colors"
+                        title="Make host">
+                        <svg class="w-4 h-4 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4m7-2l2.286 6.857L22 12l-5.714 2.143L14 21l-2.286-6.857L6 12l5.714-2.143L14 3z"/>
+                        </svg>
+                    </button>
                 ` : ''}
             </div>
         `;
@@ -818,22 +854,25 @@ function renderHistory() {
     container.innerHTML = completedStories.map((story, index) => {
         const originalIndex = appState.stories.indexOf(story);
         const isActive = originalIndex === appState.currentStoryIndex;
+        const storyTitle = escapeHtml(story.title);
+        const storyDescription = escapeHtml(story.description);
+        const finalPoints = escapeHtml(story.finalPoints);
         
         return `
             <div class="p-3 rounded-lg border ${isActive ? 'bg-yellow-500/20 border-yellow-500/50' : 'bg-white/5 border-white/10 hover:border-mystic-500/50'} transition-all cursor-pointer"
                 onclick="viewHistoricalCard(${originalIndex})">
                 <div class="flex items-start justify-between gap-2">
                     <div class="flex-1 min-w-0">
-                        <h4 class="font-semibold text-sm ${isActive ? 'text-yellow-300' : 'text-white'}">${story.title}</h4>
-                        ${story.description ? `<p class="text-xs text-gray-400 line-clamp-2 mt-1">${story.description}</p>` : ''}
+                        <h4 class="font-semibold text-sm ${isActive ? 'text-yellow-300' : 'text-white'}">${storyTitle}</h4>
+                        ${story.description ? `<p class="text-xs text-gray-400 line-clamp-2 mt-1">${storyDescription}</p>` : ''}
                     </div>
                     <div class="flex-shrink-0 w-10 h-10 bg-enchanted-500/30 border border-enchanted-400 rounded-full flex items-center justify-center animate-pulse-glow">
-                        <span class="font-bold text-lg text-enchanted-300">${story.finalPoints}</span>
+                        <span class="font-bold text-lg text-enchanted-300">${finalPoints}</span>
                     </div>
                 </div>
                 <div class="mt-2 flex flex-wrap gap-1">
                     ${Object.values(story.votes || {}).map(v => `
-                        <span class="text-xs px-2 py-0.5 bg-mystic-600/30 rounded-full text-mystic-300">${v.odeName || v.voterName}: ${v.value}</span>
+                        <span class="text-xs px-2 py-0.5 bg-mystic-600/30 rounded-full text-mystic-300">${escapeHtml(v.voterName || v.odeName)}: ${escapeHtml(v.value)}</span>
                     `).join('')}
                 </div>
             </div>
@@ -857,6 +896,12 @@ function revoteStory(index) {
 function viewHistoricalCard(storyIndex) {
     if (!appState.isHost) return;
     socket.emit('viewHistoricalCard', { storyIndex });
+}
+
+// Designate another member as host
+function designateHost(memberId) {
+    if (!appState.isHost) return;
+    socket.emit('designateHost', { memberId });
 }
 
 // Leave room
@@ -884,10 +929,15 @@ function updateRoomDisplay() {
 socket.on('roomCreated', (data) => {
     appState.roomCode = data.roomCode;
     appState.roomName = data.roomName;
+    appState.userName = pendingUserName || appState.userName;
     appState.isHost = data.isHost;
     appState.members = data.members;
     appState.stories = data.stories;
     appState.currentRole = 'player';
+    appState.voteCount = data.voteCount || 0;
+    appState.playerCount = data.playerCount || 0;
+    appState.votedMembers = data.votedMembers || [];
+    appState.wasDisconnected = false;
 
     updateRoomDisplay();
     updateRoleDisplay();
@@ -904,6 +954,7 @@ socket.on('roomCreated', (data) => {
 socket.on('roomJoined', (data) => {
     appState.roomCode = data.roomCode;
     appState.roomName = data.roomName;
+    appState.userName = pendingUserName || appState.userName;
     appState.isHost = data.isHost;
     appState.members = data.members;
     appState.stories = data.stories;
@@ -914,11 +965,16 @@ socket.on('roomJoined', (data) => {
     appState.votes = data.votes;
     appState.celebrationEmoji = data.celebrationEmoji || '🎉';
     appState.currentRole = 'player';
+    appState.voteCount = data.voteCount || 0;
+    appState.playerCount = data.playerCount || 0;
+    appState.votedMembers = data.votedMembers || [];
+    appState.wasDisconnected = false;
 
     // Find self and set role
     const self = appState.members.find(m => m.id === socket.id);
     if (self) {
         appState.currentRole = self.role;
+        appState.userName = self.name;
     }
 
     updateRoomDisplay();
@@ -945,6 +1001,11 @@ socket.on('error', (data) => {
         showError(data.message);
     }
     showToast(data.message, 'error');
+    if (appState.roomCode && data.message && data.message.startsWith('Room not found')) {
+        setTimeout(() => {
+            window.location.href = window.location.origin + window.location.pathname;
+        }, 1500);
+    }
 });
 
 socket.on('memberJoined', (data) => {
@@ -975,11 +1036,17 @@ socket.on('memberUpdated', (data) => {
 
 socket.on('hostChanged', (data) => {
     appState.members = data.members;
-    
-    // Check if we're the new host
+
     const self = appState.members.find(m => m.id === socket.id);
-    if (self && self.isHost) {
-        appState.isHost = true;
+    const wasHost = appState.isHost;
+    appState.isHost = !!(self && self.isHost);
+
+    if (self) {
+        appState.currentRole = self.role;
+        updateRoleDisplay();
+    }
+
+    if (!wasHost && appState.isHost) {
         showToast('You are now the host!', 'success');
     }
     
@@ -996,8 +1063,9 @@ socket.on('revoteStarted', (data) => {
     appState.votesRevealed = false;
     appState.myVote = null;
     appState.votes = {};
-    appState.voteCount = 0;
-    appState.votedMembers = [];
+    appState.voteCount = data.voteCount || 0;
+    appState.playerCount = data.playerCount || 0;
+    appState.votedMembers = data.votedMembers || [];
 
     document.querySelectorAll('.vote-card').forEach(card => {
         card.classList.remove('selected', 'from-enchanted-500', 'to-enchanted-700', 'border-enchanted-300');
@@ -1036,8 +1104,9 @@ socket.on('storySelected', (data) => {
     appState.votesRevealed = data.votesRevealed;
     appState.myVote = null;
     appState.votes = {};
-    appState.voteCount = 0;
-    appState.votedMembers = [];
+    appState.voteCount = data.voteCount || 0;
+    appState.playerCount = data.playerCount || 0;
+    appState.votedMembers = data.votedMembers || [];
 
     // Reset vote card selection
     document.querySelectorAll('.vote-card').forEach(card => {
@@ -1056,7 +1125,7 @@ socket.on('storySelected', (data) => {
     document.getElementById('pointsAssignment').classList.add('hidden');
     document.getElementById('resultBanner').classList.add('hidden');
 
-    showToast(`Voting started: ${data.currentStory.title}`, 'info');
+    showToast(`Voting started: ${data.currentStory?.title || 'Story'}`, 'info');
 });
 
 socket.on('voteUpdate', (data) => {
@@ -1139,20 +1208,24 @@ socket.on('viewingHistoricalCard', (data) => {
     
     // Show consensus status based on historical votes
     const voteValues = Object.values(data.story.votes || {})
-        .map(v => v.value)
-        .filter(v => typeof v === 'number');
+        .map(v => String(v.value));
     const allSame = voteValues.length > 0 && voteValues.every(v => v === voteValues[0]);
     renderConsensusStatus(allSame, allSame ? voteValues[0] : null);
 });
 
 // Handle disconnect
 socket.on('disconnect', () => {
+    appState.wasDisconnected = true;
     showToast('Connection lost. Reconnecting...', 'warning');
 });
 
 socket.on('connect', () => {
-    if (appState.roomCode) {
-        showToast('Reconnected!', 'success');
+    if (appState.roomCode && appState.userName && appState.wasDisconnected) {
+        showToast('Restoring room connection...', 'info');
+        socket.emit('joinRoom', {
+            roomCode: appState.roomCode,
+            userName: appState.userName
+        });
     }
 });
 
