@@ -1034,6 +1034,11 @@ socket.on('memberUpdated', (data) => {
     renderMembers();
 });
 
+socket.on('hostDisconnected', (data) => {
+    const seconds = Math.round((data.graceMs || 0) / 1000);
+    showToast(`${data.hostName} disconnected. Waiting ${seconds}s before host takeover...`, 'warning');
+});
+
 socket.on('hostChanged', (data) => {
     appState.members = data.members;
 

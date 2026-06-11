@@ -43,6 +43,7 @@ const MAX_NAME_LENGTH = 60;
 const MAX_ROOM_NAME_LENGTH = 100;
 const MAX_STORY_TITLE_LENGTH = 120;
 const MAX_STORY_DESCRIPTION_LENGTH = 1000;
+const HOST_RECONNECT_GRACE_MS = Number(process.env.HOST_RECONNECT_GRACE_MS) || 90000;
 
 function cleanText(value, maxLength) {
     if (typeof value !== 'string') return '';
@@ -79,6 +80,60 @@ function emitVoteUpdate(room) {
     io.to(room.code).emit('voteUpdate', getVoteStatus(room));
 }
 
+function clearPendingHostReconnect(room) {
+    if (!room.pendingHostReconnect) return;
+    clearTimeout(room.pendingHostReconnect.timer);
+    room.pendingHostReconnect = null;
+}
+
+function promoteNextHost(room) {
+    const sortedMembers = Array.from(room.members.values())
+        .sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
+
+    if (sortedMembers.length === 0) return null;
+
+    const newHost = sortedMembers[0];
+    newHost.isHost = true;
+    newHost.role = 'player';
+    room.hostId = newHost.id;
+
+    io.to(room.code).emit('hostChanged', {
+        newHost,
+        members: Array.from(room.members.values())
+    });
+    emitVoteUpdate(room);
+    return newHost;
+}
+
+function scheduleHostReconnectGrace(room, leavingMember) {
+    clearPendingHostReconnect(room);
+
+    room.pendingHostReconnect = {
+        name: leavingMember.name,
+        role: leavingMember.role,
+        joinedAt: leavingMember.joinedAt,
+        timer: setTimeout(() => {
+            room.pendingHostReconnect = null;
+
+            if (room.members.size === 0) {
+                rooms.delete(room.code);
+                console.log(`Room ${room.code} closed - host did not reconnect`);
+                return;
+            }
+
+            const newHost = promoteNextHost(room);
+            if (newHost) {
+                console.log(`Host grace expired in room ${room.code}; ${newHost.name} is now host`);
+            }
+        }, HOST_RECONNECT_GRACE_MS)
+    };
+
+    io.to(room.code).emit('hostDisconnected', {
+        hostName: leavingMember.name,
+        graceMs: HOST_RECONNECT_GRACE_MS
+    });
+}
+
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
@@ -103,6 +158,7 @@ io.on('connection', (socket) => {
             votingActive: false,
             votesRevealed: false,
             celebrationEmoji: '🎉',
+            pendingHostReconnect: null,
             createdAt: new Date()
         };
 
@@ -147,6 +203,8 @@ io.on('connection', (socket) => {
             return;
         }
 
+        const reconnectingHost = room.pendingHostReconnect && room.pendingHostReconnect.name === userName;
+
         // Check if name already exists
         const existingMember = Array.from(room.members.values()).find(m => m.name === userName);
         if (existingMember) {
@@ -154,13 +212,21 @@ io.on('connection', (socket) => {
             return;
         }
 
+        const pendingHost = room.pendingHostReconnect;
+        if (reconnectingHost) {
+            clearPendingHostReconnect(room);
+        }
+
         room.members.set(socket.id, {
             id: socket.id,
             name: userName,
-            role: 'player',
-            isHost: false,
-            joinedAt: new Date()
+            role: reconnectingHost ? pendingHost.role : 'player',
+            isHost: reconnectingHost,
+            joinedAt: reconnectingHost ? pendingHost.joinedAt : new Date()
         });
+        if (reconnectingHost) {
+            room.hostId = socket.id;
+        }
 
         socket.join(roomCode);
         socket.roomCode = roomCode;
@@ -171,7 +237,7 @@ io.on('connection', (socket) => {
         socket.emit('roomJoined', {
             roomCode: room.code,
             roomName: room.name,
-            isHost: false,
+            isHost: reconnectingHost,
             members: Array.from(room.members.values()),
             stories: room.stories,
             currentStoryIndex: room.currentStoryIndex,
@@ -188,6 +254,12 @@ io.on('connection', (socket) => {
             member: room.members.get(socket.id),
             members: Array.from(room.members.values())
         });
+        if (reconnectingHost) {
+            io.to(room.code).emit('hostChanged', {
+                newHost: room.members.get(socket.id),
+                members: Array.from(room.members.values())
+            });
+        }
         emitVoteUpdate(room);
 
         console.log(`${userName} joined room ${roomCode}`);
@@ -471,28 +543,12 @@ io.on('connection', (socket) => {
         room.members.delete(socket.id);
         room.votes.delete(socket.id);
 
-        // If room is empty, delete it
-        if (room.members.size === 0) {
+        if (leavingMember && leavingMember.isHost) {
+            scheduleHostReconnectGrace(room, leavingMember);
+        } else if (room.members.size === 0 && !room.pendingHostReconnect) {
             rooms.delete(roomCode);
             console.log(`Room ${roomCode} closed - all members left`);
             return;
-        }
-
-        // If host left, assign new host (first-in strategy)
-        if (leavingMember && leavingMember.isHost) {
-            const sortedMembers = Array.from(room.members.values())
-                .sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
-            
-            if (sortedMembers.length > 0) {
-                const newHost = sortedMembers[0];
-                newHost.isHost = true;
-                room.hostId = newHost.id;
-
-                io.to(room.code).emit('hostChanged', {
-                    newHost,
-                    members: Array.from(room.members.values())
-                });
-            }
         }
 
         // Notify remaining members
@@ -502,12 +558,7 @@ io.on('connection', (socket) => {
         });
 
         // Update vote count
-        const players = Array.from(room.members.values()).filter(m => m.role === 'player');
-        io.to(room.code).emit('voteUpdate', {
-            voteCount: room.votes.size,
-            playerCount: players.length,
-            votedMembers: Array.from(room.votes.keys())
-        });
+        emitVoteUpdate(room);
 
         console.log(`${leavingMember?.name || 'Unknown'} left room ${roomCode}`);
     });
@@ -541,19 +592,7 @@ io.on('connection', (socket) => {
 
         // If host left, assign new host (first-in strategy)
         if (leavingMember && leavingMember.isHost) {
-            const sortedMembers = Array.from(room.members.values())
-                .sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
-            
-            if (sortedMembers.length > 0) {
-                const newHost = sortedMembers[0];
-                newHost.isHost = true;
-                room.hostId = newHost.id;
-
-                io.to(room.code).emit('hostChanged', {
-                    newHost,
-                    members: Array.from(room.members.values())
-                });
-            }
+            promoteNextHost(room);
         }
 
         // Notify remaining members
@@ -563,12 +602,7 @@ io.on('connection', (socket) => {
         });
 
         // Update vote count
-        const players = Array.from(room.members.values()).filter(m => m.role === 'player');
-        io.to(room.code).emit('voteUpdate', {
-            voteCount: room.votes.size,
-            playerCount: players.length,
-            votedMembers: Array.from(room.votes.keys())
-        });
+        emitVoteUpdate(room);
 
         console.log(`${leavingMember?.name || 'Unknown'} manually left room ${roomCode}`);
     });
